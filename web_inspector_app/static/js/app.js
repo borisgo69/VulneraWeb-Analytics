@@ -20,6 +20,16 @@ const SECURITY_HEADER_HELP = {
     "x-content-type-options": "Evita que el navegador interprete archivos con un tipo distinto al declarado.",
     "referrer-policy": "Controla cuanta informacion de origen se envia al abrir enlaces externos."
 };
+const DANGEROUS_SERVICES = {
+    21: { label: "FTP", aliases: ["ftp"] },
+    23: { label: "Telnet", aliases: ["telnet"] },
+    139: { label: "NetBIOS", aliases: ["netbios", "netbios-ssn"] },
+    445: { label: "SMB", aliases: ["smb", "microsoft-ds"] },
+    3389: { label: "RDP", aliases: ["rdp", "ms-wbt-server"] }
+};
+const EXPOSURE_HELP_TEXT = "Calculado visualmente con puertos abiertos, servicios sensibles, cabeceras de seguridad ausentes y uso de HTTPS.";
+const SCAN_STATUS_STEPS = ["Analyzing target...", "Running Nmap...", "Calculating risk..."];
+var scanStatusTimer = null;
 
 function escapeHtml(value) {
     return String(value ?? "")
@@ -37,6 +47,31 @@ function asCode(value) {
 function setStatus(message, isError = false) {
     statusBox.textContent = message;
     statusBox.classList.toggle("is-error", isError);
+    statusBox.classList.remove("is-scanning");
+}
+
+function startScanStatus(skipNmap) {
+    stopScanStatus();
+    const steps = skipNmap
+        ? SCAN_STATUS_STEPS.filter((step) => step !== "Running Nmap...")
+        : SCAN_STATUS_STEPS;
+    let stepIndex = 0;
+
+    statusBox.classList.remove("is-error");
+    statusBox.classList.add("is-scanning");
+    statusBox.textContent = steps[stepIndex];
+    scanStatusTimer = setInterval(() => {
+        stepIndex = (stepIndex + 1) % steps.length;
+        statusBox.textContent = steps[stepIndex];
+    }, 1500);
+}
+
+function stopScanStatus() {
+    if (scanStatusTimer) {
+        clearInterval(scanStatusTimer);
+        scanStatusTimer = null;
+    }
+    statusBox.classList.remove("is-scanning");
 }
 
 function createDetailItem(label, value, isHtml = false) {
@@ -174,6 +209,111 @@ function getRiskClass(level) {
     return "";
 }
 
+function getLevelBadgeClass(level) {
+    if (level === "Bajo" || level === "Low Exposure") {
+        return "risk-badge--success";
+    }
+    if (level === "Medio" || level === "Medium Exposure") {
+        return "risk-badge--warning";
+    }
+    if (level === "Alto" || level === "High Exposure") {
+        return "risk-badge--danger";
+    }
+    return "";
+}
+
+function getExposureClass(level) {
+    if (level === "Low Exposure") {
+        return "metric--success";
+    }
+    if (level === "Medium Exposure") {
+        return "metric--warning";
+    }
+    if (level === "High Exposure") {
+        return "metric--danger";
+    }
+    return "";
+}
+
+function getDangerousService(port) {
+    const portNumber = Number(port?.port);
+    if (DANGEROUS_SERVICES[portNumber]) {
+        return DANGEROUS_SERVICES[portNumber];
+    }
+
+    const serviceText = [port?.service, port?.product, port?.version]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+    return Object.values(DANGEROUS_SERVICES).find((service) =>
+        service.aliases.some((alias) => serviceText.includes(alias))
+    );
+}
+
+function getMissingSecurityHeaders(web, risk) {
+    if (Array.isArray(risk?.missing_security_headers)) {
+        return risk.missing_security_headers;
+    }
+
+    const headers = Object.keys(web?.interesting_headers || {}).map((headerName) => headerName.toLowerCase());
+    const isHttps = String(web?.final_url || "").startsWith("https://");
+    return Object.keys(SECURITY_HEADER_HELP).filter((headerName) => {
+        if (headerName === "strict-transport-security" && !isHttps) {
+            return false;
+        }
+        return !headers.includes(headerName);
+    });
+}
+
+function calculateExposure(data) {
+    const web = data.web || {};
+    const risk = data.risk || {};
+    const nmap = data.nmap || {};
+    const nmapExecuted = nmap.executed !== false;
+    const openPorts = Array.isArray(nmap.open_ports) ? nmap.open_ports : [];
+    const dangerousOpenPorts = openPorts.filter((port) => getDangerousService(port));
+    const missingHeaders = getMissingSecurityHeaders(web, risk);
+    const isHttps = String(web.final_url || "").startsWith("https://");
+    let score = 0;
+
+    if (nmapExecuted && openPorts.length >= 8) {
+        score += 2;
+    } else if (nmapExecuted && openPorts.length > 0) {
+        score += 1;
+    }
+
+    if (dangerousOpenPorts.length > 0) {
+        score += 2;
+    }
+
+    if (missingHeaders.length >= 4) {
+        score += 2;
+    } else if (missingHeaders.length > 0) {
+        score += 1;
+    }
+
+    if (!isHttps) {
+        score += 2;
+    }
+
+    const label = score <= 1 ? "Low Exposure" : score <= 4 ? "Medium Exposure" : "High Exposure";
+    const factors = [
+        nmapExecuted ? `${openPorts.length} puertos abiertos` : "Nmap omitido",
+        `${dangerousOpenPorts.length} servicios sensibles`,
+        `${missingHeaders.length} cabeceras ausentes`,
+        isHttps ? "HTTPS activo" : "Sin HTTPS"
+    ];
+
+    return {
+        label,
+        metricClass: getExposureClass(label),
+        badgeClass: getLevelBadgeClass(label),
+        note: factors.join(" | "),
+        help: EXPOSURE_HELP_TEXT
+    };
+}
+
 function renderMetrics(data) {
     const nmapExecuted = data.nmap.executed !== false;
     const openPorts = data.nmap.open_ports?.length ?? 0;
@@ -185,6 +325,8 @@ function renderMetrics(data) {
     const riskLevel = risk.level || "Sin datos";
     const riskPoints = Number.isFinite(Number(risk.points)) ? `${risk.points} puntos` : "";
     const riskClass = getRiskClass(riskLevel);
+    const riskBadgeClass = getLevelBadgeClass(riskLevel);
+    const exposure = calculateExposure(data);
 
     metricsGrid.innerHTML = `
         <article class="metric ${statusClass}">
@@ -203,10 +345,15 @@ function renderMetrics(data) {
             <span class="metric__label">Puertos abiertos</span>
             <strong class="metric__value">${escapeHtml(openPortsValue)}</strong>
         </article>
-        <article class="metric ${riskClass}">
+        <article class="metric metric--priority ${riskClass}">
             <span class="metric__label">Riesgo</span>
-            <strong class="metric__value">${escapeHtml(riskLevel)}</strong>
+            <strong class="metric__value"><span class="risk-badge ${riskBadgeClass}">${escapeHtml(riskLevel)}</span></strong>
             ${riskPoints ? `<span class="metric__note">${escapeHtml(riskPoints)}</span>` : ""}
+        </article>
+        <article class="metric metric--priority ${exposure.metricClass}">
+            <span class="metric__label">Exposure Level</span>
+            <strong class="metric__value"><span class="risk-badge ${exposure.badgeClass}">${escapeHtml(exposure.label)}</span></strong>
+            <span class="metric__note" title="${escapeHtml(exposure.help)}">${escapeHtml(exposure.note)}</span>
         </article>
     `;
 }
@@ -261,14 +408,31 @@ function getStateClass(state) {
 }
 
 function renderPortRow(port) {
-    const description = [port.service, port.product, port.version].filter(Boolean).join(" ");
+    const serviceName = port.service || "Servicio no identificado";
+    const productDetails = [port.product, port.version].filter(Boolean).join(" ");
     const stateClass = getStateClass(port.state);
+    const dangerousService = getDangerousService(port);
+    const isRiskyOpenService = stateClass === "open" && Boolean(dangerousService);
+    const rowClasses = [
+        "port-row",
+        `port-row--${stateClass}`,
+        dangerousService ? "port-row--watched" : "",
+        isRiskyOpenService ? "port-row--risky" : ""
+    ].filter(Boolean).join(" ");
+    const statePillClass = isRiskyOpenService ? "state-pill--danger" : `state-pill--${stateClass}`;
 
     return `
-        <div class="port-row port-row--${stateClass}">
-            <span class="port-row__name">${escapeHtml(port.protocol)}/${escapeHtml(port.port)}</span>
-            <span class="port-row__service">${escapeHtml(description || "Servicio no identificado")}</span>
-            <span class="state-pill state-pill--${stateClass}">${escapeHtml(getStateText(port.state))}</span>
+        <div class="${rowClasses}">
+            <span class="port-row__name">
+                <span>${escapeHtml(port.protocol)}/${escapeHtml(port.port)}</span>
+                ${dangerousService ? `<span class="risk-chip ${isRiskyOpenService ? "risk-chip--danger" : "risk-chip--muted"}">${escapeHtml(dangerousService.label)}</span>` : ""}
+            </span>
+            <span class="port-row__service">
+                <span class="port-row__description">${escapeHtml(serviceName)}</span>
+                ${productDetails ? `<span class="port-row__meta">${escapeHtml(productDetails)}</span>` : ""}
+                ${isRiskyOpenService ? '<span class="port-row__warning">Servicio sensible expuesto</span>' : ""}
+            </span>
+            <span class="state-pill ${statePillClass}">${escapeHtml(getStateText(port.state))}</span>
         </div>
     `;
 }
@@ -339,12 +503,14 @@ function renderHistory(history) {
     if (!history || history.length === 0) {
         updateClearHistoryButton(history);
         historyList.classList.add("empty-state");
+        historyList.classList.remove("is-error-state");
         historyList.textContent = "Sin escaneos guardados.";
         return;
     }
 
     updateClearHistoryButton(history);
     historyList.classList.remove("empty-state");
+    historyList.classList.remove("is-error-state");
     historyList.innerHTML = history
         .map((entry) => {
             const openPorts = Number(entry.open_ports || 0);
@@ -404,6 +570,7 @@ async function loadHistory() {
         }
     } catch {
         updateClearHistoryButton([]);
+        historyList.classList.add("empty-state", "is-error-state");
         historyList.textContent = "No se ha podido cargar el historial.";
     }
 }
@@ -493,18 +660,22 @@ form.addEventListener("submit", async (event) => {
     submitButton.disabled = true;
     submitButton.textContent = "Analizando...";
     submitButton.classList.add("is-loading");
-    setStatus(`Analizando ${target}...`);
+    form.classList.add("is-scanning");
+    startScanStatus(skipNmap);
 
     try {
         const data = await inspectTarget(target, skipNmap);
         renderReport(data);
+        stopScanStatus();
         setStatus(`Analisis completado para ${data.web.final_url}`);
     } catch (error) {
+        stopScanStatus();
         setStatus(error.message, true);
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = originalButtonText;
         submitButton.classList.remove("is-loading");
+        form.classList.remove("is-scanning");
     }
 });
 
