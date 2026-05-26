@@ -68,6 +68,6 @@ $env:NMAP_COMMAND = "wsl nmap"
 python app.py
 ```
 
-## Nota importante
+## Importante
 
 Usa esta herramienta solo con autorizacion expresa sobre infraestructuras propias o entornos de laboratorio.
