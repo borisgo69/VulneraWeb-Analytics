@@ -1,0 +1,32 @@
+[
+  {
+    "generated_at": "2026-05-26T10:26:16.632052+00:00",
+    "target": "nmap.org",
+    "host": "nmap.org",
+    "final_url": "https://nmap.org/",
+    "status_code": 200,
+    "response_time_ms": 832,
+    "open_ports": 0,
+    "command": ""
+  },
+  {
+    "generated_at": "2026-05-26T10:26:04.568189+00:00",
+    "target": "hack-yourself-first.com",
+    "host": "hack-yourself-first.com",
+    "final_url": "https://hack-yourself-first.com/",
+    "status_code": 200,
+    "response_time_ms": 1110,
+    "open_ports": 4,
+    "command": "nmap -Pn -T3 --top-ports 20 hack-yourself-first.com -oX -"
+  },
+  {
+    "generated_at": "2026-05-26T10:09:25.030550+00:00",
+    "target": "nmap.org",
+    "host": "nmap.org",
+    "final_url": "https://nmap.org/",
+    "status_code": 200,
+    "response_time_ms": 872,
+    "open_ports": 4,
+    "command": "nmap -Pn -T3 --top-ports 20 nmap.org -oX -"
+  }
+]

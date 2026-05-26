@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulneraweb Analytics</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <div class="brand">
+                <span class="brand__mark">VA</span>
+                <div>
+                    <p class="eyebrow">Security dashboard</p>
+                    <h1>Vulneraweb Analytics</h1>
+                </div>
+            </div>
+            <div class="app-header__meta">
+                <span class="status-dot"></span>
+                <span>Uso autorizado</span>
+            </div>
+        </header>
+
+        <main class="dashboard">
+            <section class="dashboard-top">
+                <article class="panel scan-panel">
+                    <div class="panel__heading">
+                        <div>
+                            <p class="eyebrow">Nuevo escaneo</p>
+                            <h2>Objetivo</h2>
+                        </div>
+                    </div>
+                    <form id="inspect-form" class="inspect-form">
+                        <label for="target">IP, URL o dominio</label>
+                        <div class="inspect-form__row">
+                            <input id="target" name="target" type="text" placeholder="192.168.1.1 o ejemplo.com" required>
+                            <button type="submit">Analizar</button>
+                        </div>
+                        <label class="checkbox-field" for="skip-nmap">
+                            <input id="skip-nmap" name="skip_nmap" type="checkbox">
+                            <span>Omitir escaneo nmap</span>
+                        </label>
+                    </form>
+                    <div id="status-box" class="status-box" aria-live="polite">
+                        Esperando objetivo.
+                    </div>
+                </article>
+
+                <article class="panel history-panel">
+                    <div class="panel__heading">
+                        <div>
+                            <p class="eyebrow">Persistencia JSON</p>
+                            <h2>Historial</h2>
+                        </div>
+                        <button id="clear-history" class="button--danger" type="button" disabled>Borrar historial</button>
+                    </div>
+                    <div id="history-list" class="history-list empty-state">
+                        Sin escaneos guardados.
+                    </div>
+                </article>
+            </section>
+
+            <section class="panel metrics-panel">
+                <div class="panel__heading">
+                    <div>
+                        <p class="eyebrow">Resumen</p>
+                        <h2>Indicadores principales</h2>
+                    </div>
+                    <button id="download-report" class="button--secondary" type="button" disabled>Descargar informe JSON</button>
+                </div>
+                <div id="metrics-grid" class="metrics-grid">
+                    <article class="metric">
+                        <span class="metric__label">Estado HTTP</span>
+                        <strong class="metric__value">Sin datos</strong>
+                    </article>
+                    <article class="metric">
+                        <span class="metric__label">Respuesta</span>
+                        <strong class="metric__value">Sin datos</strong>
+                    </article>
+                    <article class="metric">
+                        <span class="metric__label">Formularios</span>
+                        <strong class="metric__value">Sin datos</strong>
+                    </article>
+                    <article class="metric">
+                        <span class="metric__label">Puertos abiertos</span>
+                        <strong class="metric__value">Sin datos</strong>
+                    </article>
+                    <article class="metric">
+                        <span class="metric__label">Riesgo</span>
+                        <strong class="metric__value">Sin datos</strong>
+                    </article>
+                </div>
+            </section>
+
+            <section class="results-grid">
+                <article class="panel">
+                    <div class="panel__heading">
+                        <h2>Perfil del sitio</h2>
+                    </div>
+                    <div id="site-profile" class="detail-list empty-state">
+                        Sin datos.
+                    </div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel__heading">
+                        <h2>Cabeceras y hallazgos</h2>
+                    </div>
+                    <div id="headers-panel" class="detail-list empty-state">
+                        Sin datos.
+                    </div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel__heading">
+                        <h2>Nmap</h2>
+                    </div>
+                    <div id="nmap-panel" class="detail-list empty-state">
+                        Sin datos.
+                    </div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel__heading">
+                        <h2>TLS y enlaces</h2>
+                    </div>
+                    <div id="tls-panel" class="detail-list empty-state">
+                        Sin datos.
+                    </div>
+                </article>
+            </section>
+
+            <div id="command-used" class="command-used">
+                Comando: pendiente.
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
